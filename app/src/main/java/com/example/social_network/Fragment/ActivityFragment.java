@@ -60,6 +60,9 @@ public class ActivityFragment extends Fragment {
             Intent intent = new Intent(requireContext(), ChatDetailActivity.class);
             intent.putExtra(ChatDetailActivity.EXTRA_USERNAME, conversation.getUsername());
             intent.putExtra(ChatDetailActivity.EXTRA_RECEIVER_ID, conversation.getReceiverId());
+            if (conversation.getConversationId() != null && !conversation.getConversationId().isEmpty()) {
+                intent.putExtra(ChatDetailActivity.EXTRA_CONVERSATION_ID, conversation.getConversationId());
+            }
             startActivity(intent);
         });
         rv.setAdapter(messagesAdapter);
@@ -124,7 +127,8 @@ public class ActivityFragment extends Fragment {
                             label,
                             "",
                             "",
-                            Color.parseColor("#3797EF")
+                            Color.parseColor("#3797EF"),
+                            null
                     ));
                 }
                 applyFollowedFilter(etMsgSearch.getText().toString());
@@ -147,12 +151,14 @@ public class ActivityFragment extends Fragment {
                 for (ConservationDTO user : users) {
                     String receiverId = user.getUserId() != null ? user.getUserId() : "";
                     String label = user.getUserName() != null ? user.getUserName() : receiverId;
+                    String convId = user.getConversationId();
                     conversations.add(new ConversationModel(
                             receiverId,
                             label,
                             "",
                             "",
-                            Color.parseColor("#3797EF")
+                            Color.parseColor("#3797EF"),
+                            convId
                     ));
                 }
                 messagesAdapter.notifyDataSetChanged();

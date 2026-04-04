@@ -1,6 +1,7 @@
 package com.example.social_network.Network;
 
 import android.content.Context;
+import android.net.Uri;
 import android.util.Base64;
 import android.util.Log;
 
@@ -12,7 +13,6 @@ import com.example.social_network.Config.AppConfig;
 import com.example.social_network.Model.ConservationDTO;
 import com.example.social_network.Model.ConversationRequestDto;
 import com.example.social_network.Model.ConversationResponseDto;
-import com.example.social_network.Model.FollowingUserDto;
 import com.example.social_network.Model.MessageDto;
 import com.example.social_network.Model.SendMessageRequestDto;
 import com.example.social_network.Utils.TokenManager;
@@ -30,7 +30,8 @@ import java.util.Map;
 public class ChatApiService implements ChatApiInterface {
     private static final String PROFILE_FOLLOWING_PATH = "/profile/getFollowed";
     private static final String CONVERSATIONS_PATH = "/my-conversations";
-    private static final String MESSAGES_PATH = "/messages";
+    private static final String CONVERSATION_CREATE_PATH = "/chat/conversation/create";
+    private static final String MESSAGE_CREATE_PATH = "/chat/messages/create";
 
     @Override
     public String getCurrentUserId(Context context) {
@@ -62,7 +63,7 @@ public class ChatApiService implements ChatApiInterface {
                 Request.Method.GET,
                 url,
                 null,
-                response -> callback.onSuccess(parseFollowingUsers(response)),
+                response -> callback.onSuccess(parseFollowingUsers(response, getCurrentUserId(context))),
                 error -> callback.onFailure(parseError(error))
         ) {
             @Override
@@ -78,11 +79,17 @@ public class ChatApiService implements ChatApiInterface {
     public void getOrCreateConversation(Context context,
                                         ConversationRequestDto requestDto,
                                         ConversationCallback callback) {
-        String url = AppConfig.BSSE_URL_CHAT + CONVERSATIONS_PATH;
+        if (requestDto.getReceiverId() == null || requestDto.getReceiverId().isEmpty()) {
+            callback.onFailure("Thiếu người nhận");
+            return;
+        }
+        String url = AppConfig.BSSE_URL_CHAT + CONVERSATION_CREATE_PATH;
         JSONObject body = new JSONObject();
         try {
-            body.put("senderId", requestDto.getSenderId());
-            body.put("receiverId", requestDto.getReceiverId());
+            body.put("type", "DIRECT");
+            JSONArray participantIds = new JSONArray();
+            participantIds.put(requestDto.getReceiverId());
+            body.put("participantIds", participantIds);
         } catch (JSONException e) {
             callback.onFailure("Invalid request body");
             return;
@@ -92,7 +99,17 @@ public class ChatApiService implements ChatApiInterface {
                 Request.Method.POST,
                 url,
                 body,
-                response -> callback.onSuccess(parseConversationResponse(response.optJSONObject("result"))),
+                response -> {
+                    if (!"1000".equals(String.valueOf(response.opt("code")))) {
+                        String msg = response.optString("message", "");
+                        if (msg == null || msg.isEmpty()) {
+                            msg = "Tạo cuộc trò chuyện thất bại";
+                        }
+                        callback.onFailure(msg);
+                        return;
+                    }
+                    callback.onSuccess(parseConversationResponse(response.optJSONObject("result")));
+                },
                 error -> callback.onFailure(parseError(error))
         ) {
             @Override
@@ -106,13 +123,36 @@ public class ChatApiService implements ChatApiInterface {
 
     @Override
     public void getMessages(Context context, String conversationId, MessagesCallback callback) {
-        String url = AppConfig.BSSE_URL_CHAT + MESSAGES_PATH + "/" + conversationId;
+        if (conversationId == null || conversationId.isEmpty()) {
+            callback.onFailure("Thiếu conversationId");
+            return;
+        }
+        String token = TokenManager.getAccessToken(context);
+        if (token == null || token.isEmpty()) {
+            callback.onFailure("Chưa có access token — vui lòng đăng nhập lại");
+            return;
+        }
+        String url = Uri.parse(AppConfig.BSSE_URL_CHAT + "/chat/messages")
+                .buildUpon()
+                .appendQueryParameter("conversationId", conversationId)
+                .build()
+                .toString();
 
         JsonObjectRequest request = new JsonObjectRequest(
                 Request.Method.GET,
                 url,
                 null,
-                response -> callback.onSuccess(parseMessages(response.optJSONArray("result"))),
+                response -> {
+                    if (!"1000".equals(String.valueOf(response.opt("code")))) {
+                        String msg = response.optString("message", "");
+                        if (msg == null || msg.isEmpty()) {
+                            msg = "Không tải được tin nhắn";
+                        }
+                        callback.onFailure(msg);
+                        return;
+                    }
+                    callback.onSuccess(parseMessages(extractMessagesResultArray(response)));
+                },
                 error -> callback.onFailure(parseError(error))
         ) {
             @Override
@@ -126,12 +166,21 @@ public class ChatApiService implements ChatApiInterface {
 
     @Override
     public void postMessage(Context context, SendMessageRequestDto requestDto, SendMessageCallback callback) {
-        String url = AppConfig.BSSE_URL_CHAT + MESSAGES_PATH;
+        String token = TokenManager.getAccessToken(context);
+        if (token == null || token.isEmpty()) {
+            callback.onFailure("Chưa có access token — vui lòng đăng nhập lại");
+            return;
+        }
+        if (requestDto.getConversationId() == null || requestDto.getConversationId().isEmpty()) {
+            callback.onFailure("Thiếu conversationId");
+            return;
+        }
+
+        String url = AppConfig.BSSE_URL_CHAT + MESSAGE_CREATE_PATH;
         JSONObject body = new JSONObject();
         try {
             body.put("conversationId", requestDto.getConversationId());
-            body.put("senderId", requestDto.getSenderId());
-            body.put("content", requestDto.getContent());
+            body.put("message", requestDto.getMessage());
         } catch (JSONException e) {
             callback.onFailure("Invalid request body");
             return;
@@ -141,7 +190,18 @@ public class ChatApiService implements ChatApiInterface {
                 Request.Method.POST,
                 url,
                 body,
-                response -> callback.onSuccess(),
+                response -> {
+                    if (!"1000".equals(String.valueOf(response.opt("code")))) {
+                        String msg = response.optString("message", "");
+                        if (msg == null || msg.isEmpty()) {
+                            msg = "Gửi tin nhắn thất bại";
+                        }
+                        callback.onFailure(msg);
+                        return;
+                    }
+                    MessageDto sent = parseMessageItem(response.optJSONObject("result"));
+                    callback.onSuccess(sent);
+                },
                 error -> callback.onFailure(parseError(error))
         ) {
             @Override
@@ -163,13 +223,13 @@ public class ChatApiService implements ChatApiInterface {
         headers.put("Accept", "application/json");
 
         String accessToken = TokenManager.getAccessToken(context);
-        if (accessToken != null) {
-            headers.put("Authorization", "Bearer " + accessToken);
+        if (accessToken != null && !accessToken.isEmpty()) {
+            headers.put("Authorization", "Bearer " + accessToken.trim());
         }
         return headers;
     }
 
-    private List<ConservationDTO> parseFollowingUsers(JSONObject response) {
+    private List<ConservationDTO> parseFollowingUsers(JSONObject response, String currentUserId) {
         List<ConservationDTO> conservationDTOList = new ArrayList<>();
         if (response == null) {
             return conservationDTOList;
@@ -186,29 +246,122 @@ public class ChatApiService implements ChatApiInterface {
                 continue;
             }
 
-            JSONArray participantsResponse = item.optJSONArray("participants");
-            if (participantsResponse == null || participantsResponse.length() == 0) {
-                continue;
-            }
+            String convDocId = extractConversationDocumentId(item);
 
-            JSONObject participant = participantsResponse.optJSONObject(0);
+            JSONArray participantsResponse = item.optJSONArray("participants");
+            JSONObject participant = pickOtherParticipant(participantsResponse, currentUserId);
             if (participant == null) {
                 continue;
             }
 
             String peerUserId = participant.optString("userId", null);
-            String conversationAvatar = participant.optString("avatar", null);
-            String userName = participant.optString("userName", null);
+            String conversationAvatar = participant.isNull("avatar")
+                    ? null
+                    : participant.optString("avatar", null);
+            String userName = participant.isNull("userName")
+                    ? null
+                    : participant.optString("userName", null);
             if (userName == null || userName.isEmpty()) {
                 userName = peerUserId;
             }
 
             if (userName != null && !userName.isEmpty()) {
-                conservationDTOList.add(new ConservationDTO(peerUserId, conversationAvatar, userName));
+                conservationDTOList.add(new ConservationDTO(peerUserId, conversationAvatar, userName, convDocId));
             }
         }
 
         return conservationDTOList;
+    }
+
+    /**
+     * Prefer the other participant in a DIRECT thread (not the current user).
+     */
+    private static JSONObject pickOtherParticipant(JSONArray participants, String myUserId) {
+        if (participants == null || participants.length() == 0) {
+            return null;
+        }
+        if (myUserId != null && !myUserId.isEmpty()) {
+            for (int i = 0; i < participants.length(); i++) {
+                JSONObject p = participants.optJSONObject(i);
+                if (p == null) {
+                    continue;
+                }
+                String uid = p.optString("userId", "");
+                if (!myUserId.equals(uid)) {
+                    return p;
+                }
+            }
+        }
+        return participants.optJSONObject(0);
+    }
+
+    /**
+     * Mongo / API conversation id on the parent conversation object.
+     */
+    private static String extractConversationDocumentId(JSONObject item) {
+        if (item == null) {
+            return null;
+        }
+        String[] keys = {"id", "_id", "conversationId"};
+        for (String key : keys) {
+            if (!item.has(key) || item.isNull(key)) {
+                continue;
+            }
+            Object v = item.opt(key);
+            if (v instanceof JSONObject) {
+                String oid = ((JSONObject) v).optString("$oid", "");
+                if (!oid.isEmpty()) {
+                    return oid;
+                }
+                continue;
+            }
+            String s = item.optString(key, "");
+            if (!s.isEmpty() && !"null".equalsIgnoreCase(s)) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    private static JSONArray extractMessagesResultArray(JSONObject response) {
+        if (response == null) {
+            return null;
+        }
+        Object raw = response.opt("result");
+        if (raw instanceof JSONArray) {
+            return (JSONArray) raw;
+        }
+        if (raw instanceof JSONObject) {
+            JSONObject box = (JSONObject) raw;
+            JSONArray a = box.optJSONArray("messages");
+            if (a != null) {
+                return a;
+            }
+            a = box.optJSONArray("data");
+            if (a != null) {
+                return a;
+            }
+            a = box.optJSONArray("content");
+            if (a != null) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    private static boolean readMeFlag(JSONObject item) {
+        if (item == null || !item.has("me") || item.isNull("me")) {
+            return false;
+        }
+        Object v = item.opt("me");
+        if (v instanceof Boolean) {
+            return (Boolean) v;
+        }
+        if (v instanceof Number) {
+            return ((Number) v).intValue() != 0;
+        }
+        String s = item.optString("me", "");
+        return "true".equalsIgnoreCase(s) || "1".equals(s);
     }
 
     @Override
@@ -271,32 +424,68 @@ public class ChatApiService implements ChatApiInterface {
         return list;
     }
 
-    private ConversationResponseDto parseConversationResponse(JSONObject response) {
-        if (response == null) {
+    /**
+     * Chat create API returns {@code id} (may be null) and {@code participantsHash};
+     * messages API may use either — prefer non-empty {@code id}, else {@code participantsHash}.
+     */
+    private ConversationResponseDto parseConversationResponse(JSONObject result) {
+        if (result == null) {
             return new ConversationResponseDto(null);
         }
-        String conversationId = response.optString("conversationId", null);
-        return new ConversationResponseDto(conversationId);
+        String docId = extractConversationDocumentId(result);
+        if (docId != null) {
+            return new ConversationResponseDto(docId);
+        }
+        String participantsHash = result.optString("participantsHash", "");
+        if (!participantsHash.isEmpty()) {
+            return new ConversationResponseDto(participantsHash);
+        }
+        return new ConversationResponseDto(null);
     }
 
-    private List<MessageDto> parseMessages(JSONArray response) {
+    private MessageDto parseMessageItem(JSONObject item) {
+        if (item == null) {
+            return null;
+        }
+
+        String id = item.optString("id", "");
+        String conversationId = item.optString("conversationId", "");
+        boolean fromMe = readMeFlag(item);
+        String content = item.optString("message", "");
+        if (content.isEmpty()) {
+            content = item.optString("content", "");
+        }
+        String timestamp = item.optString("createdDate", "");
+        if (timestamp.isEmpty()) {
+            timestamp = item.optString("timestamp", "");
+        }
+
+        String senderId = "";
+        String incomingAvatar = null;
+        JSONObject sender = item.optJSONObject("sender");
+        if (sender != null) {
+            senderId = sender.optString("userId", "");
+            if (!sender.isNull("avatar")) {
+                String av = sender.optString("avatar", "");
+                if (!av.isEmpty()) {
+                    incomingAvatar = av;
+                }
+            }
+        }
+
+        return new MessageDto(id, conversationId, senderId, content, timestamp, fromMe, incomingAvatar);
+    }
+
+    private List<MessageDto> parseMessages(JSONArray arr) {
         List<MessageDto> messages = new ArrayList<>();
-        if (response == null) {
+        if (arr == null) {
             return messages;
         }
-        for (int i = 0; i < response.length(); i++) {
-            JSONObject item = response.optJSONObject(i);
-            if (item == null) {
-                continue;
+        for (int i = 0; i < arr.length(); i++) {
+            MessageDto dto = parseMessageItem(arr.optJSONObject(i));
+            if (dto != null) {
+                messages.add(dto);
             }
-
-            String id = item.optString("id", null);
-            String conversationId = item.optString("conversationId", null);
-            String senderId = item.optString("senderId", null);
-            String content = item.optString("content", null);
-            String timestamp = item.optString("timestamp", null);
-
-            messages.add(new MessageDto(id, conversationId, senderId, content, timestamp));
         }
         return messages;
     }

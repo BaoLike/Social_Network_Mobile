@@ -34,8 +34,13 @@ public class TokenManager {
      * (ví dụ sau khi app khởi động lại).
      */
     public static String getAccessToken(Context context) {
-        if (AppConfig.ACCESS_TOKEN != null) return AppConfig.ACCESS_TOKEN;
+        if (AppConfig.ACCESS_TOKEN != null && !AppConfig.ACCESS_TOKEN.isEmpty()) {
+            return AppConfig.ACCESS_TOKEN;
+        }
         String token = prefs(context).getString(KEY_ACCESS_TOKEN, null);
+        if (token != null && token.isEmpty()) {
+            token = null;
+        }
         AppConfig.ACCESS_TOKEN = token;
         return token;
     }

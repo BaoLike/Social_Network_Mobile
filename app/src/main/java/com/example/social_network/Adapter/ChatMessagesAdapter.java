@@ -58,9 +58,17 @@ public class ChatMessagesAdapter extends RecyclerView.Adapter<ChatMessagesAdapte
             holder.llIncoming.setVisibility(View.VISIBLE);
             holder.tvIncomingText.setVisibility(View.VISIBLE);
             holder.tvIncomingText.setText(msg.getText());
-            
-            // Mock avatar for incoming
-            Picasso.get().load("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400").centerCrop().fit().into(holder.ivIncomingAvatar);
+
+            String avatarUrl = msg.getIncomingAvatarUrl();
+            if (avatarUrl != null && !avatarUrl.isEmpty()) {
+                Picasso.get().load(avatarUrl).centerCrop().fit().into(holder.ivIncomingAvatar);
+            } else {
+                Picasso.get()
+                        .load("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400")
+                        .centerCrop()
+                        .fit()
+                        .into(holder.ivIncomingAvatar);
+            }
         }
     }
 

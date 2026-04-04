@@ -5,7 +5,6 @@ import android.content.Context;
 import com.example.social_network.Model.ConservationDTO;
 import com.example.social_network.Model.ConversationRequestDto;
 import com.example.social_network.Model.ConversationResponseDto;
-import com.example.social_network.Model.FollowingUserDto;
 import com.example.social_network.Model.MessageDto;
 import com.example.social_network.Model.SendMessageRequestDto;
 
@@ -28,7 +27,9 @@ public interface ChatApiInterface {
     }
 
     interface SendMessageCallback {
-        void onSuccess();
+        /** {@code sentMessage} may be null if server body could not be parsed. */
+        void onSuccess(MessageDto sentMessage);
+
         void onFailure(String message);
     }
 

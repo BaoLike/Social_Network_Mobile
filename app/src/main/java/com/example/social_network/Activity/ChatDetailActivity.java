@@ -42,6 +42,8 @@ public class ChatDetailActivity extends AppCompatActivity {
 
     public static final String EXTRA_USERNAME = "extra_username";
     public static final String EXTRA_RECEIVER_ID = "extra_receiver_id";
+    /** When set (e.g. from inbox row), load messages without calling create again. */
+    public static final String EXTRA_CONVERSATION_ID = "extra_conversation_id";
 
     private RecyclerView rvMessages;
     private ChatMessagesAdapter adapter;
@@ -129,6 +131,13 @@ public class ChatDetailActivity extends AppCompatActivity {
     }
 
     private void loadConversationAndMessages() {
+        String presetConversationId = getIntent().getStringExtra(EXTRA_CONVERSATION_ID);
+        if (presetConversationId != null && !presetConversationId.trim().isEmpty()) {
+            conversationId = presetConversationId.trim();
+            loadMessages(conversationId);
+            return;
+        }
+
         if (currentUserId == null || receiverId == null) {
             Toast.makeText(this, "Cannot load chat data", Toast.LENGTH_SHORT).show();
             return;
@@ -139,6 +148,12 @@ public class ChatDetailActivity extends AppCompatActivity {
             @Override
             public void onSuccess(com.example.social_network.Model.ConversationResponseDto conversation) {
                 conversationId = conversation.getConversationId();
+                if (conversationId == null || conversationId.isEmpty()) {
+                    Toast.makeText(ChatDetailActivity.this,
+                            "Server không trả về id cuộc trò chuyện — không thể tải tin nhắn",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
                 loadMessages(conversationId);
             }
 
@@ -157,8 +172,13 @@ public class ChatDetailActivity extends AppCompatActivity {
 
                 messages.clear();
                 for (MessageDto dto : messageDtos) {
-                    boolean isOutgoing = currentUserId.equals(dto.getSenderId());
-                    messages.add(new ChatMessage(dto.getContent(), null, dto.getTimestamp(), isOutgoing));
+                    messages.add(new ChatMessage(
+                            dto.getContent(),
+                            null,
+                            dto.getTimestamp(),
+                            dto.isFromMe(),
+                            dto.isFromMe() ? null : dto.getIncomingAvatarUrl()
+                    ));
                 }
                 adapter.notifyDataSetChanged();
                 if (!messages.isEmpty()) {
@@ -181,15 +201,31 @@ public class ChatDetailActivity extends AppCompatActivity {
 
         addMessage(new ChatMessage(content, null, "", true));
 
-        SendMessageRequestDto requestDto = new SendMessageRequestDto(
-                conversationId,
-                currentUserId,
-                content
-        );
+        SendMessageRequestDto requestDto = new SendMessageRequestDto(conversationId, content);
 
         chatApiService.postMessage(this, requestDto, new ChatApiInterface.SendMessageCallback() {
             @Override
-            public void onSuccess() {
+            public void onSuccess(MessageDto sentMessage) {
+                if (sentMessage == null || messages.isEmpty()) {
+                    return;
+                }
+                int last = messages.size() - 1;
+                ChatMessage lastMsg = messages.get(last);
+                if (!lastMsg.isOutgoing()) {
+                    return;
+                }
+                String ts = sentMessage.getTimestamp();
+                if (ts == null || ts.isEmpty()) {
+                    return;
+                }
+                messages.set(last, new ChatMessage(
+                        sentMessage.getContent(),
+                        null,
+                        ts,
+                        sentMessage.isFromMe(),
+                        sentMessage.isFromMe() ? null : sentMessage.getIncomingAvatarUrl()
+                ));
+                adapter.notifyItemChanged(last);
             }
 
             @Override
