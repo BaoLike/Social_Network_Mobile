@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="menu_edit_profile"    type="id" />
+    <item name="menu_change_password" type="id" />
+    <item name="menu_toggle_theme"    type="id" />
+    <item name="menu_logout"          type="id" />
+</resources>
