@@ -36,24 +36,39 @@
         android:padding="12dp">
 
         <EditText
+            android:id="@+id/etSearchKeyword"
             android:layout_width="match_parent"
             android:layout_height="40dp"
             android:background="@drawable/bg_input_field"
-            android:hint="Search"
+            android:hint="Tìm theo tên đăng nhập"
+            android:imeOptions="actionSearch"
             android:inputType="text"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
             android:textSize="14sp" />
     </LinearLayout>
 
-    <!-- Placeholder content -->
-    <TextView
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center"
-        android:text="Discover People &amp; Posts"
-        android:textColor="@color/colorTextSecondary"
-        android:textSize="16sp" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSearchUsers"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:id="@+id/tvSearchEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="Gõ tên đăng nhập để tìm người dùng"
+            android:textColor="@color/colorTextSecondary"
+            android:textSize="15sp" />
+    </FrameLayout>
 
 </LinearLayout>
