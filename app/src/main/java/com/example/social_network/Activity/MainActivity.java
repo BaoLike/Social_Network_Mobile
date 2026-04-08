@@ -9,6 +9,7 @@ import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextWatcher;
 import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -20,7 +21,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.example.social_network.Config.AppConfig;
 import com.example.social_network.R;
 import com.example.social_network.Utils.FetchApi;
+import com.example.social_network.Utils.FcmRegistrationHelper;
 import com.example.social_network.Utils.TokenManager;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,16 +43,31 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Nếu đã đăng nhập trước đó thì bỏ qua màn login
+        FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+
+                    if (!task.isSuccessful()) {
+                        Log.w("FCM", "Fetching FCM token failed", task.getException());
+                        return;
+                    }
+
+                    String token = task.getResult();
+                    Log.d("FCM_TOKEN", token);
+                    FcmRegistrationHelper.register(MainActivity.this, token);
+                });
+
+    // Nếu đã đăng nhập trước đó thì bỏ qua màn login
         if (TokenManager.isLoggedIn(this)) {
             startActivity(new Intent(this, HomeActivity.class));
             finish();
             return;
+
         }
 
         setupSignUpText();
         setupBackButton();
         setupLoginButton();
+
     }
 
     private void setupLoginButton() {
@@ -87,6 +105,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onSuccess() {
+                    FcmRegistrationHelper.registerWithCurrentToken(MainActivity.this);
                     startActivity(new Intent(MainActivity.this, HomeActivity.class));
                     finish();
                 }
@@ -122,4 +141,7 @@ public class MainActivity extends AppCompatActivity {
         ImageButton btnBack = findViewById(R.id.btnBack);
         btnBack.setOnClickListener(v -> onBackPressed());
     }
+
+
+
 }

@@ -17,6 +17,7 @@ import com.example.social_network.Fragment.HomeFragment;
 import com.example.social_network.Fragment.ProfileFragment;
 import com.example.social_network.Fragment.SearchFragment;
 import com.example.social_network.R;
+import com.example.social_network.Utils.FcmRegistrationHelper;
 
 public class HomeActivity extends AppCompatActivity {
 
@@ -48,6 +49,8 @@ public class HomeActivity extends AppCompatActivity {
 
         bindViews();
         setupBottomNav();
+
+        FcmRegistrationHelper.registerWithCurrentToken(this);
 
         if (savedInstanceState == null) {
             showFragment(homeFragment, TAB_HOME);
