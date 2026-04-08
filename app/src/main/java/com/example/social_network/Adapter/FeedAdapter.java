@@ -1,5 +1,6 @@
 package com.example.social_network.Adapter;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.text.SpannableString;
@@ -19,14 +20,20 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.social_network.Activity.StoryViewerActivity;
 import com.example.social_network.Model.Post;
 import com.example.social_network.Model.Story;
 import com.example.social_network.R;
+import com.example.social_network.Utils.FetchApi;
+import com.squareup.picasso.Picasso;
 
 import java.util.List;
 import java.util.Locale;
 
 public class FeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+    private static final String STORY_FALLBACK_MEDIA =
+            "https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200";
+
 
     private static final int VIEW_TYPE_STORIES = 0;
     private static final int VIEW_TYPE_POST    = 1;
@@ -86,16 +93,21 @@ public class FeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             rvStories.setLayoutManager(
                     new LinearLayoutManager(itemView.getContext(), LinearLayoutManager.HORIZONTAL, false));
             rvStories.setAdapter(adapter);
-            adapter.setOnStoryClickListener((story, position) ->
-                    Toast.makeText(itemView.getContext(),
-                            story.isOwn() ? "Add story" : "View " + story.getUser().getUsername() + "'s story",
-                            Toast.LENGTH_SHORT).show());
+            adapter.setOnStoryClickListener((story, position) -> {
+                Intent intent = new Intent(itemView.getContext(), StoryViewerActivity.class);
+                intent.putExtra(StoryViewerActivity.EXTRA_MEDIA_URL, STORY_FALLBACK_MEDIA);
+                intent.putExtra(StoryViewerActivity.EXTRA_AVATAR_URL, story.getUser().getAvatarUrl());
+                intent.putExtra(StoryViewerActivity.EXTRA_USERNAME, story.getUser().getUsername());
+                intent.putExtra(StoryViewerActivity.EXTRA_TIME, "4h");
+                itemView.getContext().startActivity(intent);
+            });
         }
     }
 
     // ----------------------------- Post ViewHolder -----------------------------
 
     static class PostViewHolder extends RecyclerView.ViewHolder {
+        private static final String TAG = "FeedAdapter";
         private final ImageView   ivPostAvatar;
         private final TextView    tvPostUsername;
         private final ImageView   ivVerified;
@@ -127,11 +139,16 @@ public class FeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         void bind(Post post) {
             // Avatar
-            GradientDrawable avatarBg = new GradientDrawable();
-            avatarBg.setShape(GradientDrawable.OVAL);
-            avatarBg.setColor(post.getUser().getAvatarColor());
-            ivPostAvatar.setBackground(avatarBg);
-            ivPostAvatar.setImageDrawable(null);
+            String avatarUrl = post.getUser().getAvatarUrl();
+            if (avatarUrl != null && !avatarUrl.trim().isEmpty()) {
+                Picasso.get().load(avatarUrl).centerCrop().fit().into(ivPostAvatar);
+            } else {
+                GradientDrawable avatarBg = new GradientDrawable();
+                avatarBg.setShape(GradientDrawable.OVAL);
+                avatarBg.setColor(post.getUser().getAvatarColor());
+                ivPostAvatar.setBackground(avatarBg);
+                ivPostAvatar.setImageDrawable(null);
+            }
 
             // Username
             tvPostUsername.setText(post.getUser().getUsername());
@@ -148,9 +165,14 @@ public class FeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 tvPostLocation.setVisibility(View.GONE);
             }
 
-            // Post image placeholder
-            ivPostImage.setBackgroundColor(post.getImageColors().get(0));
-            ivPostImage.setImageDrawable(null);
+            // Post media (from API) with fallback placeholder
+            if (post.getImageUrl() != null && !post.getImageUrl().trim().isEmpty()) {
+                ivPostImage.setBackgroundColor(Color.TRANSPARENT);
+                Picasso.get().load(post.getImageUrl()).centerCrop().fit().into(ivPostImage);
+            } else {
+                ivPostImage.setBackgroundColor(post.getImageColors().get(0));
+                ivPostImage.setImageDrawable(null);
+            }
 
             // Multi-image counter
             int imageCount = post.getImageCount();
@@ -167,10 +189,38 @@ public class FeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             // Like button
             updateLikeButton(post);
             btnLike.setOnClickListener(v -> {
-                post.setLiked(!post.isLiked());
-                post.setLikeCount(post.isLiked() ? post.getLikeCount() + 1 : post.getLikeCount() - 1);
+                String postId = post.getPostId();
+                if (postId == null || postId.trim().isEmpty()) {
+                    Toast.makeText(itemView.getContext(), "Thiếu postId để like", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                boolean willLike = !post.isLiked();
+                // Optimistic update: update UI immediately, request continues in background.
+                post.setLiked(willLike);
+                int current = post.getLikeCount();
+                int next = willLike ? (current + 1) : Math.max(0, current - 1);
+                post.setLikeCount(next);
                 updateLikeButton(post);
                 updateLikesText(post);
+
+                FetchApi api = new FetchApi();
+                FetchApi.ApiCallback cb = new FetchApi.ApiCallback() {
+                    @Override
+                    public void onSuccess() {
+                    }
+
+                    @Override
+                    public void onFailure(String message) {
+                        // Keep UI responsive; just inform user if server call fails.
+                        Toast.makeText(itemView.getContext(), message, Toast.LENGTH_SHORT).show();
+                    }
+                };
+
+                if (willLike) {
+                    api.putLikePost(itemView.getContext(), postId, TAG, cb);
+                } else {
+                    api.putUnlikePost(itemView.getContext(), postId, TAG, cb);
+                }
             });
 
             // Bookmark button
@@ -186,7 +236,9 @@ public class FeedAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 btnComment.setOnClickListener(v -> {
                     android.content.Context ctx = itemView.getContext();
                     if (ctx instanceof androidx.fragment.app.FragmentActivity) {
-                        com.example.social_network.Fragment.CommentsBottomSheet sheet = com.example.social_network.Fragment.CommentsBottomSheet.newInstance();
+                        com.example.social_network.Fragment.CommentsBottomSheet sheet =
+                                com.example.social_network.Fragment.CommentsBottomSheet
+                                        .newInstance(post.getPostId(), post.getComments());
                         sheet.show(((androidx.fragment.app.FragmentActivity) ctx).getSupportFragmentManager(), "CommentsBottomSheet");
                     }
                 });

@@ -43,10 +43,7 @@
             android:name=".Activity.ChatDetailActivity"
             android:exported="false" />
         <activity
-            android:name=".Activity.EditProfileActivity"
-            android:exported="false" />
-        <activity
-            android:name=".Activity.OtherUserProfileActivity"
+            android:name=".Activity.StoryViewerActivity"
             android:exported="false" />
     </application>
 

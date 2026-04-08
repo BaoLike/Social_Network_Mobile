@@ -9,13 +9,13 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
+        android:layout_marginTop="15dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
         android:paddingEnd="12dp">
 
         <TextView
-            android:id="@+id/tvProfileToolbarUsername"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -92,10 +92,9 @@
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/tvStatPosts"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="—"
+                    android:text="42"
                     android:textColor="@color/colorTextPrimary"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -116,10 +115,9 @@
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/tvStatFollowers"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="0"
+                    android:text="1.2K"
                     android:textColor="@color/colorTextPrimary"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -140,10 +138,9 @@
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/tvStatFollowing"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="0"
+                    android:text="385"
                     android:textColor="@color/colorTextPrimary"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -168,7 +165,6 @@
         android:paddingBottom="12dp">
 
         <TextView
-            android:id="@+id/tvProfileBioUsername"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="your_username"
@@ -177,11 +173,11 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/tvProfileBioDetail"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:textColor="@color/colorTextSecondary"
+            android:text="✨ Living life one photo at a time 📸"
+            android:textColor="@color/colorTextPrimary"
             android:textSize="13sp" />
     </LinearLayout>
 

@@ -2,30 +2,25 @@ package com.example.social_network.Activity;
 
 import android.app.DatePickerDialog;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
-import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.android.volley.DefaultRetryPolicy;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.toolbox.Volley;
 import com.example.social_network.Config.AppConfig;
 import com.example.social_network.R;
 import com.example.social_network.Utils.FetchApi;
-
-import org.json.JSONException;
-import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -38,16 +33,15 @@ public class RegisterActivity extends AppCompatActivity {
     private EditText etFirstName, etLastName, etEmail;
     private EditText etUsername, etPassword;
     private EditText etGender, etDob, etAddress;
+    private ImageView ivAvatarPreview;
+    private Uri selectedAvatarUri;
     private final String urlRegister = AppConfig.BASE_URL + "/identity/user/create";
     private static final String TAG = "RegisterActivity";
 
     private final String[] genderOptions = {"Male", "Female", "Other"};
 
-    // Callback interface vì Volley là async
-    interface RegisterCallback {
-        void onSuccess();
-        void onFailure(String message);
-    }
+    private final ActivityResultLauncher<String> pickAvatarLauncher =
+            registerForActivityResult(new ActivityResultContracts.GetContent(), this::onAvatarPicked);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,6 +51,7 @@ public class RegisterActivity extends AppCompatActivity {
         bindViews();
         setupGenderPicker();
         setupDobPicker();
+        setupAvatarPicker();
         setupSignUpButton();
         setupLoginLink();
         setupBackButton();
@@ -71,6 +66,7 @@ public class RegisterActivity extends AppCompatActivity {
         etGender    = findViewById(R.id.etGender);
         etDob       = findViewById(R.id.etDob);
         etAddress   = findViewById(R.id.etAddress);
+        ivAvatarPreview = findViewById(R.id.ivAvatarPreview);
     }
 
     private void setupGenderPicker() {
@@ -104,6 +100,18 @@ public class RegisterActivity extends AppCompatActivity {
         });
     }
 
+    private void setupAvatarPicker() {
+        findViewById(R.id.btnChooseAvatar).setOnClickListener(v -> pickAvatarLauncher.launch("image/*"));
+    }
+
+    private void onAvatarPicked(Uri uri) {
+        if (uri == null) {
+            return;
+        }
+        selectedAvatarUri = uri;
+        ivAvatarPreview.setImageURI(uri);
+    }
+
     private void setupSignUpButton() {
         Button btnSignUp = findViewById(R.id.btnSignUp);
         btnSignUp.setOnClickListener(v -> {
@@ -121,7 +129,8 @@ public class RegisterActivity extends AppCompatActivity {
             btnSignUp.setEnabled(false);
             btnSignUp.setText("Signing up...");
             FetchApi fetchApi = new FetchApi();
-            fetchApi.postRegister(urlRegister, requestBody,RegisterActivity.this, TAG, new FetchApi.ApiCallback() {
+            fetchApi.postRegister(urlRegister, requestBody, selectedAvatarUri,
+                    RegisterActivity.this, TAG, new FetchApi.ApiCallback() {
                 @Override
                 public void onSuccess() {
                     Toast.makeText(RegisterActivity.this,

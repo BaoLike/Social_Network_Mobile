@@ -1,6 +1,8 @@
 package com.example.social_network.Model;
 
-public class CommentModel {
+import java.io.Serializable;
+
+public class CommentModel implements Serializable {
     private String username;
     private String commentText;
     private String timeAgo;

@@ -1,16 +1,17 @@
 package com.example.social_network.Activity;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.social_network.Data.PostRepository;
-import com.example.social_network.Model.PostGridModel;
 import com.example.social_network.R;
+import com.example.social_network.Utils.FetchApi;
 import com.squareup.picasso.Picasso;
 
 /**
@@ -21,6 +22,7 @@ import com.squareup.picasso.Picasso;
  */
 public class NewPostActivity extends AppCompatActivity {
 
+    private static final String TAG = "NewPostActivity";
     private String imageUrl;
 
     @Override
@@ -40,29 +42,52 @@ public class NewPostActivity extends AppCompatActivity {
         // Back button
         findViewById(R.id.btnNewPostBack).setOnClickListener(v -> finish());
 
-        // Share button → create PostGridModel, add to repo, finish entire flow
+        // Share button → call create-post API (multipart: media + data)
         EditText etCaption = findViewById(R.id.etCaption);
-        findViewById(R.id.tvShare).setOnClickListener(v -> {
+        TextView tvShare = findViewById(R.id.tvShare);
+        tvShare.setOnClickListener(v -> {
             String caption = etCaption.getText().toString().trim();
+            Uri mediaUri = parseUploadableMediaUri(imageUrl);
+            if (mediaUri == null) {
+                Toast.makeText(this,
+                        "Ảnh mẫu không upload được. Vui lòng chọn ảnh/video từ thiết bị.",
+                        Toast.LENGTH_LONG).show();
+                return;
+            }
 
-            PostGridModel newPost = new PostGridModel(
-                    imageUrl,
-                    PostGridModel.Type.IMAGE,
-                    0,                       // 0 likes initially
-                    "jacob_w",               // current user
-                    caption.isEmpty() ? "✨" : caption,
-                    "just now"
-            );
+            tvShare.setEnabled(false);
+            tvShare.setText("Sharing...");
+            Toast.makeText(this, "Đang đăng bài...", Toast.LENGTH_SHORT).show();
+            new FetchApi().postCreatePost(getApplicationContext(), mediaUri, caption, TAG, new FetchApi.ApiCallback() {
+                @Override
+                public void onSuccess() {
+                    // No-op: optimistic navigation already happened.
+                }
 
-            PostRepository.getInstance().addPost(newPost);
+                @Override
+                public void onFailure(String message) {
+                    Toast.makeText(getApplicationContext(),
+                            "Đăng bài nền thất bại: " + message, Toast.LENGTH_LONG).show();
+                }
+            });
 
-            Toast.makeText(this, "Post shared!", Toast.LENGTH_SHORT).show();
-
-            // Close both NewPostActivity and AddImageActivity
-            Intent intent = new Intent(this, HomeActivity.class);
+            Intent intent = new Intent(NewPostActivity.this, HomeActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             finish();
         });
+    }
+
+    private Uri parseUploadableMediaUri(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        Uri uri = Uri.parse(value);
+        if (uri == null) return null;
+        String scheme = uri.getScheme();
+        if ("file".equalsIgnoreCase(scheme) || "content".equalsIgnoreCase(scheme)) {
+            return uri;
+        }
+        return null;
     }
 }

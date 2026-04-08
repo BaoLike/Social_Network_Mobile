@@ -6,12 +6,9 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -34,18 +31,14 @@ import com.example.social_network.Model.MessageDto;
 import com.example.social_network.Model.SendMessageRequestDto;
 import com.example.social_network.Network.ChatApiInterface;
 import com.example.social_network.Network.ChatApiService;
-import com.example.social_network.Network.ChatSocketManager;
 import com.example.social_network.R;
 import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 
 public class ChatDetailActivity extends AppCompatActivity {
-
-    private static final long MESSAGE_POLL_INTERVAL_MS = 3_500;
 
     public static final String EXTRA_USERNAME = "extra_username";
     public static final String EXTRA_RECEIVER_ID = "extra_receiver_id";
@@ -56,7 +49,6 @@ public class ChatDetailActivity extends AppCompatActivity {
     private ChatMessagesAdapter adapter;
     private final List<ChatMessage> messages = new ArrayList<>();
     private ChatApiService chatApiService;
-    private ChatSocketManager chatSocketManager;
     private String currentUserId;
     private String receiverId;
     private String conversationId;
@@ -64,32 +56,6 @@ public class ChatDetailActivity extends AppCompatActivity {
     private EditText etMessageInput;
     private ImageView btnSendText;
     private LinearLayout llInputActions;
-
-    private final Handler pollHandler = new Handler(Looper.getMainLooper());
-    private final Runnable messagePollRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (isFinishing() || conversationId == null || conversationId.isEmpty()) {
-                return;
-            }
-            chatApiService.getMessages(ChatDetailActivity.this, conversationId,
-                    new ChatApiInterface.MessagesCallback() {
-                        @Override
-                        public void onSuccess(List<MessageDto> messageDtos) {
-                            if (isFinishing()) {
-                                return;
-                            }
-                            applyMessageDtoListIfChanged(messageDtos);
-                            pollHandler.postDelayed(messagePollRunnable, MESSAGE_POLL_INTERVAL_MS);
-                        }
-
-                        @Override
-                        public void onFailure(String message) {
-                            pollHandler.postDelayed(messagePollRunnable, MESSAGE_POLL_INTERVAL_MS);
-                        }
-                    });
-        }
-    };
 
     private final ActivityResultLauncher<String> requestPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), isGranted -> {
@@ -202,9 +168,22 @@ public class ChatDetailActivity extends AppCompatActivity {
         chatApiService.getMessages(this, conversationIdValue, new ChatApiInterface.MessagesCallback() {
             @Override
             public void onSuccess(List<MessageDto> messageDtos) {
-                applyMessageDtoListForce(messageDtos);
-                connectRealtimeSocket();
-                startMessagePolling();
+                messageDtos.sort(Comparator.comparing(MessageDto::getTimestamp, Comparator.nullsLast(String::compareTo)));
+
+                messages.clear();
+                for (MessageDto dto : messageDtos) {
+                    messages.add(new ChatMessage(
+                            dto.getContent(),
+                            null,
+                            dto.getTimestamp(),
+                            dto.isFromMe(),
+                            dto.isFromMe() ? null : dto.getIncomingAvatarUrl()
+                    ));
+                }
+                adapter.notifyDataSetChanged();
+                if (!messages.isEmpty()) {
+                    rvMessages.scrollToPosition(messages.size() - 1);
+                }
             }
 
             @Override
@@ -212,143 +191,6 @@ public class ChatDetailActivity extends AppCompatActivity {
                 Toast.makeText(ChatDetailActivity.this, message, Toast.LENGTH_SHORT).show();
             }
         });
-    }
-
-    private void applyMessageDtoListForce(List<MessageDto> messageDtos) {
-        if (messageDtos == null) {
-            return;
-        }
-        messageDtos.sort(Comparator.comparing(MessageDto::getTimestamp, Comparator.nullsLast(String::compareTo)));
-
-        messages.clear();
-        for (MessageDto dto : messageDtos) {
-            messages.add(toChatMessage(dto));
-        }
-        adapter.notifyDataSetChanged();
-        if (!messages.isEmpty()) {
-            rvMessages.scrollToPosition(messages.size() - 1);
-        }
-    }
-
-    private void applyMessageDtoListIfChanged(List<MessageDto> messageDtos) {
-        if (messageDtos == null) {
-            return;
-        }
-        messageDtos.sort(Comparator.comparing(MessageDto::getTimestamp, Comparator.nullsLast(String::compareTo)));
-
-        if (messageListsEqual(messages, messageDtos)) {
-            return;
-        }
-        messages.clear();
-        for (MessageDto dto : messageDtos) {
-            messages.add(toChatMessage(dto));
-        }
-        adapter.notifyDataSetChanged();
-        if (!messages.isEmpty()) {
-            rvMessages.scrollToPosition(messages.size() - 1);
-        }
-    }
-
-    private static ChatMessage toChatMessage(MessageDto dto) {
-        return new ChatMessage(
-                dto.getContent(),
-                null,
-                dto.getTimestamp(),
-                dto.isFromMe(),
-                dto.isFromMe() ? null : dto.getIncomingAvatarUrl()
-        );
-    }
-
-    private static boolean messageListsEqual(List<ChatMessage> ui, List<MessageDto> fromApi) {
-        if (ui.size() != fromApi.size()) {
-            return false;
-        }
-        for (int i = 0; i < ui.size(); i++) {
-            ChatMessage a = ui.get(i);
-            MessageDto b = fromApi.get(i);
-            if (a.isOutgoing() != b.isFromMe()) {
-                return false;
-            }
-            if (!Objects.equals(normalizeEmpty(a.getText()), normalizeEmpty(b.getContent()))) {
-                return false;
-            }
-            if (!Objects.equals(normalizeEmpty(a.getTimestamp()), normalizeEmpty(b.getTimestamp()))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static String normalizeEmpty(String s) {
-        return s == null ? "" : s;
-    }
-
-    private void startMessagePolling() {
-        pollHandler.removeCallbacks(messagePollRunnable);
-        pollHandler.postDelayed(messagePollRunnable, MESSAGE_POLL_INTERVAL_MS);
-    }
-
-    private void stopMessagePolling() {
-        pollHandler.removeCallbacks(messagePollRunnable);
-    }
-
-    private void connectRealtimeSocket() {
-        if (conversationId == null || conversationId.isEmpty()) {
-            return;
-        }
-        disconnectRealtimeSocket();
-        chatSocketManager = new ChatSocketManager(this);
-        chatSocketManager.connect(conversationId, new ChatSocketManager.Listener() {
-            @Override
-            public void onNewChatMessage(String text, boolean fromMe, String createdDate, String incomingAvatarUrl) {
-                if (isFinishing()) {
-                    return;
-                }
-                if (fromMe) {
-                    return;
-                }
-                if (text == null || text.isEmpty()) {
-                    return;
-                }
-                addMessage(new ChatMessage(text, null, createdDate != null ? createdDate : "",
-                        false, incomingAvatarUrl));
-            }
-
-            @Override
-            public void onConnected() {
-                /* có thể Log.d nếu cần debug */
-            }
-
-            @Override
-            public void onDisconnected() {
-            }
-
-            @Override
-            public void onError(String message) {
-                Log.w("ChatDetail", "socket: " + message);
-            }
-        });
-    }
-
-    private void disconnectRealtimeSocket() {
-        if (chatSocketManager != null) {
-            chatSocketManager.disconnect();
-            chatSocketManager = null;
-        }
-    }
-
-    @Override
-    protected void onPause() {
-        stopMessagePolling();
-        super.onPause();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (conversationId != null && !conversationId.isEmpty()) {
-            startMessagePolling();
-        }
     }
 
     private void sendMessage(String content) {
@@ -434,14 +276,7 @@ public class ChatDetailActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
             e.printStackTrace();
-                Toast.makeText(this, "Lỗi khi truy xuất ảnh", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Lỗi khi truy xuất ảnh", Toast.LENGTH_SHORT).show();
         }
-    }
-
-    @Override
-    protected void onDestroy() {
-        stopMessagePolling();
-        disconnectRealtimeSocket();
-        super.onDestroy();
     }
 }

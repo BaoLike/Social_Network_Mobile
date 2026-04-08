@@ -88,7 +88,8 @@ public class PostDetailActivity extends AppCompatActivity {
 
         // ── Comment / Share (stub) ─────────────────────────────────────────
         findViewById(R.id.btnDetailComment).setOnClickListener(v -> {
-            com.example.social_network.Fragment.CommentsBottomSheet sheet = com.example.social_network.Fragment.CommentsBottomSheet.newInstance();
+            com.example.social_network.Fragment.CommentsBottomSheet sheet =
+                    com.example.social_network.Fragment.CommentsBottomSheet.newInstance(new java.util.ArrayList<>());
             sheet.show(getSupportFragmentManager(), "CommentsBottomSheet");
         });
 
